@@ -1,0 +1,421 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=2">
+<meta name="theme-color" content="#222">
+<meta name="generator" content="Hexo 5.2.0">
+  <link rel="apple-touch-icon" sizes="180x180" href="/blog/images/apple-touch-icon-next.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="/blog/images/favicon-32x32-next.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/blog/images/favicon-16x16-next.png">
+  <link rel="mask-icon" href="/blog/images/logo.svg" color="#222">
+
+<link rel="stylesheet" href="/blog/css/main.css">
+
+
+<link rel="stylesheet" href="/blog/lib/font-awesome/css/all.min.css">
+
+<script id="hexo-configurations">
+    var NexT = window.NexT || {};
+    var CONFIG = {"hostname":"sihan-wang.github.io","root":"/blog/","scheme":"Muse","version":"7.8.0","exturl":false,"sidebar":{"position":"left","display":"post","padding":18,"offset":12,"onmobile":false},"copycode":{"enable":false,"show_result":false,"style":null},"back2top":{"enable":true,"sidebar":false,"scrollpercent":false},"bookmark":{"enable":false,"color":"#222","save":"auto"},"fancybox":false,"mediumzoom":false,"lazyload":false,"pangu":false,"comments":{"style":"tabs","active":null,"storage":true,"lazyload":false,"nav":null},"algolia":{"hits":{"per_page":10},"labels":{"input_placeholder":"Search for Posts","hits_empty":"We didn't find any results for the search: ${query}","hits_stats":"${hits} results found in ${time} ms"}},"localsearch":{"enable":false,"trigger":"auto","top_n_per_article":1,"unescape":false,"preload":false},"motion":{"enable":true,"async":false,"transition":{"post_block":"fadeIn","post_header":"slideDownIn","post_body":"slideDownIn","coll_header":"slideLeftIn","sidebar":"slideUpIn"}}};
+  </script>
+
+  <meta name="description" content="其实不是一篇GNN的paper，是关于微服务内异常根源分析检测的。基本全部理解了，还在组会上做了报告。这里是带自己理解的论文翻译。">
+<meta property="og:type" content="article">
+<meta property="og:title" content="05 Localizing Failure Root Causes in a Microservice through Causality Inference">
+<meta property="og:url" content="https://sihan-wang.github.io/blog/2020/12/29/05-Localizing-Failure-Root-Causes-in-a-Microservice-through-Causality-Inference/index.html">
+<meta property="og:site_name" content="DarcyCAPU&#39;s Blog">
+<meta property="og:description" content="其实不是一篇GNN的paper，是关于微服务内异常根源分析检测的。基本全部理解了，还在组会上做了报告。这里是带自己理解的论文翻译。">
+<meta property="og:locale" content="en_US">
+<meta property="article:published_time" content="2020-12-28T16:32:50.000Z">
+<meta property="article:modified_time" content="2020-12-28T16:35:45.255Z">
+<meta property="article:author" content="Sihan Wang">
+<meta property="article:tag" content="GNNPaper">
+<meta name="twitter:card" content="summary">
+
+<link rel="canonical" href="https://sihan-wang.github.io/blog/2020/12/29/05-Localizing-Failure-Root-Causes-in-a-Microservice-through-Causality-Inference/">
+
+
+<script id="page-configurations">
+  // https://hexo.io/docs/variables.html
+  CONFIG.page = {
+    sidebar: "",
+    isHome : false,
+    isPost : true,
+    lang   : 'en'
+  };
+</script>
+
+  <title>05 Localizing Failure Root Causes in a Microservice through Causality Inference | DarcyCAPU's Blog</title>
+  
+
+
+
+
+
+
+  <noscript>
+  <style>
+  .use-motion .brand,
+  .use-motion .menu-item,
+  .sidebar-inner,
+  .use-motion .post-block,
+  .use-motion .pagination,
+  .use-motion .comments,
+  .use-motion .post-header,
+  .use-motion .post-body,
+  .use-motion .collection-header { opacity: initial; }
+
+  .use-motion .site-title,
+  .use-motion .site-subtitle {
+    opacity: initial;
+    top: initial;
+  }
+
+  .use-motion .logo-line-before i { left: initial; }
+  .use-motion .logo-line-after i { right: initial; }
+  </style>
+</noscript>
+
+</head>
+
+<body itemscope itemtype="http://schema.org/WebPage">
+  <div class="container use-motion">
+    <div class="headband"></div>
+
+    <header class="header" itemscope itemtype="http://schema.org/WPHeader">
+      <div class="header-inner"><div class="site-brand-container">
+  <div class="site-nav-toggle">
+    <div class="toggle" aria-label="Toggle navigation bar">
+      <span class="toggle-line toggle-line-first"></span>
+      <span class="toggle-line toggle-line-middle"></span>
+      <span class="toggle-line toggle-line-last"></span>
+    </div>
+  </div>
+
+  <div class="site-meta">
+
+    <a href="/blog/" class="brand" rel="start">
+      <span class="logo-line-before"><i></i></span>
+      <h1 class="site-title">DarcyCAPU's Blog</h1>
+      <span class="logo-line-after"><i></i></span>
+    </a>
+  </div>
+
+  <div class="site-nav-right">
+    <div class="toggle popup-trigger">
+    </div>
+  </div>
+</div>
+
+
+
+
+<nav class="site-nav">
+  <ul id="menu" class="main-menu menu">
+        <li class="menu-item menu-item-home">
+
+    <a href="/blog/" rel="section"><i class="fa fa-home fa-fw"></i>Home</a>
+
+  </li>
+        <li class="menu-item menu-item-archives">
+
+    <a href="/blog/archives/" rel="section"><i class="fa fa-archive fa-fw"></i>Archives</a>
+
+  </li>
+  </ul>
+</nav>
+
+
+
+
+</div>
+    </header>
+
+    
+  <div class="back-to-top">
+    <i class="fa fa-arrow-up"></i>
+    <span>0%</span>
+  </div>
+
+
+    <main class="main">
+      <div class="main-inner">
+        <div class="content-wrap">
+          
+
+          <div class="content post posts-expand">
+            
+
+    
+  
+  
+  <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="en">
+    <link itemprop="mainEntityOfPage" href="https://sihan-wang.github.io/blog/2020/12/29/05-Localizing-Failure-Root-Causes-in-a-Microservice-through-Causality-Inference/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/blog/images/avatar.gif">
+      <meta itemprop="name" content="Sihan Wang">
+      <meta itemprop="description" content="">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="DarcyCAPU's Blog">
+    </span>
+      <header class="post-header">
+        <h1 class="post-title" itemprop="name headline">
+          05 Localizing Failure Root Causes in a Microservice through Causality Inference
+        </h1>
+
+        <div class="post-meta">
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-calendar"></i>
+              </span>
+              <span class="post-meta-item-text">Posted on</span>
+              
+
+              <time title="Created: 2020-12-29 00:32:50 / Modified: 00:35:45" itemprop="dateCreated datePublished" datetime="2020-12-29T00:32:50+08:00">2020-12-29</time>
+            </span>
+
+          
+            <div class="post-description">其实不是一篇GNN的paper，是关于微服务内异常根源分析检测的。基本全部理解了，还在组会上做了报告。这里是带自己理解的论文翻译。</div>
+
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody">
+
+      
+        <h2 id="Abstract"><a href="#Abstract" class="headerlink" title="Abstract"></a>Abstract</h2><p>有效定位在线微服务发生的错误的根本原因，实现快速的服务恢复和减少损失，对应用程序的服务质量至关重要。侧重于研究微服务内部定位失败的根本原因。提出了一个框架MicroCause，结合了路径条件时间序列（PCTS）算法和一种基于时序原因的随机游走（TCORW）方法，这种方法结合了监测指标数据的因果关系、时间顺序、优先级信息。<br>作者收集了来自某全球线上购物服务收集到的86张现实世界的失败罚单来评估MicroCause。实验表明，MicroCause对微服务内部故障根源定位的top 5准确率为98.7%，大大高于最佳基线方法(33.4%)。</p>
+<h2 id="Introduction"><a href="#Introduction" class="headerlink" title="Introduction"></a>Introduction</h2><p>在微服务体系结构中，应用程序被解耦为多个微服务，尽管已经有工作来理解故障如何在微服务之间传播，并试图定位导致故障的根本微服务。但是在微服务中定位失败的根本原因还没有被研究，这对运营同样重要。<br>导致微服务失败的组件可能是下面三种类型：上游组件、下游组件、部署环境，运营商会配置一系列监视器，监控每个微服务的性能，这些指标包括KPI（例如响应时间RT），上游组件相关metric（例如QPS，每秒响应请求数），下游组件相关指标度量（例如中间件RT）、部署环境相关指标（例如底层容器的CPU利用率）。当一个KPI出现异常，通常表现为微服务失败，这是由微服务的上游组件、下游组件或部署环境引起的。通常，异常组件或部署环境可以通过一个或多个metric，metric的异常可以说明为什么根本原因（的组件）变得异常。所以微服务失败的根本原因可以用异常metric来表示。异常的KPI指示的微服务故障是由异常的metric引起的。<br>但是KPI和metric之间存在大量且复杂的依赖关系，作者希望设计一个自动框架，在微服务中定位根本原因指标。主要从两个方面展开：学习部件之间的关系来构造依赖图，通过随机游走推断故障根源。<br><strong>挑战：</strong></p>
+<ul>
+<li>传统的因果图构造方法是面对独立同分布的数据，不能充分利用传播时延。</li>
+<li>当前的随机游走算法基于以下假设：与异常KPI更为相关的异常metric更可能是根本原因，但这不一定正确。</li>
+</ul>
+<p>分别地，</p>
+<ul>
+<li>作者设计了一种新的路径条件时间序列（PCTS）算法，在充分利用传播时延的情况下学习监控指标的依赖图。用改进的PC学习时间序列每个点的因果图，在两个时间序列之间生成边从而生成总的因果图。</li>
+<li>提出了新的面向临时原因的随机游走，使用了三种类型的信息：（1）监测指标的因果关系；（2）metric指标的异常关系，包括发生时间、异常程度；（3）metric的优先级</li>
+</ul>
+<h2 id="Preliminaries"><a href="#Preliminaries" class="headerlink" title="Preliminaries"></a>Preliminaries</h2><h3 id="A-Microservice-architecture"><a href="#A-Microservice-architecture" class="headerlink" title="A. Microservice architecture"></a>A. Microservice architecture</h3><p>在微服务体系结构中，应用程序被分解为多个微服务，每个微服务负责一个特定的功能，例如查询数据、创建订单。这样，微服务由于其可重用性，可以同时为多个应用程序提供服务，微服务之间存在着直接或间接的调用关系，应用程序通过微服务之间的一系列调用来完成。</p>
+<h3 id="B-Problem-Statement"><a href="#B-Problem-Statement" class="headerlink" title="B. Problem Statement"></a>B. Problem Statement</h3><p><strong>故障和异常</strong>：微服务故障是指微服务不起作用，严重影响用户体验质量的事件，例如，当订单创建微服务创建订单的速度非常慢甚至无法创建任何订单。失败必须是可观察的，从一个人，一个应用程序，或另一个微服务。微服务是异常的是指当它的行为偏离正常，例如，它的底层容器内存利用率非常高。然而，对于微服务来说，由于其负载平衡机制、自恢复策略等，异常状态不一定会导致失败。<br><strong>KPI和metric</strong>：监测指标本质上是时间序列数据，可分为两类：Key performance indicator（KPI）和metric。KPI，是用户感知的直接反映服务质量的指标（例如微服务的平均响应时间）。当微服务的某个KPI异常时，该微服务将被视为失败。<br>metric表示微服务底层组件的状态，例如微服务的底层物理机/虚拟机/容器的CPU利用率，其上游微服务的每秒查询数（QPS），或其下游微服务的响应时间。<u>异常metric</u>可能是指示微服务失败的<u>异常KPI</u>的潜在根本原因。<br>指标的异常并不一定会导致KPI异常。例如，当一个微服务的底层数据库发生故障，并且数据库相关的度量变得异常时，由于负载平衡策略，微服务可能是正常的。（高可用集群？）<br><strong>失败通知单</strong>：在我们的场景中，微服务的失败通知单通常由三个关键元素组成：指示故障发生位置的微服务ID、表示哪个KPI异常的KPI、显示故障发生时间的时间戳。因此，它可以表示为元组，即{microservice ID，KPI，timestamp}。例如，{微服务A，Web RT，17:18}就是一个微服务失败。<br><strong>问题定义</strong>：根据上述定义，我们的目标可以表述如下。给定一张失败通知单，MicroCause将尝试本地化最有可能是失败根本原因的前N个度量。</p>
+<h3 id="C、-PC算法"><a href="#C、-PC算法" class="headerlink" title="C、 PC算法"></a>C、 PC算法</h3><p>因果学习的目的是从数据中发现因果关系，有助于更好地理解物理机制。所需数据可以来自精心设计的比较实验。近年来，使用观测数据进行因果分析在许多领域已被证明是有效的。从观测数据构造因果图的最常用方法是PC算法，它由Peter Spirtes和Clark Glymour提出。<br>PC算法的目的是学习随机变量之间的因果关系。<br>假设我们准备学习M个随机变量之间的因果图。输入是N个独立的同分布样本。每个样本包含M个值，分别代表M个随机变量的观测值。因果图是有向无环图（DAG）G，每个节点代表一个随机变量。将每个时间序列视为一个随机变量，并将每个时间点的数据作为样本。PC算法基于变量A和变量B之间没有边的假设。形式上，给定一个变量集S，A与B无关，表示为A⊥B | S。<br>PC算法有四个步骤：<br>1） 构造M个随机变量的全连通图。<br>2） 在显著性水平α下对每对邻接变量进行条件独立性检验。如果存在条件独立性，则删除两个变量之间的边。在这一步中，条件变量集S逐步增大，直到没有更多的变量可以添加到S中。<br>3） 基于v-结构确定一些边的方向。<br>4） 确定其余边的方向。</p>
+<h3 id="D、-随机游走"><a href="#D、-随机游走" class="headerlink" title="D、 随机游走"></a>D、 随机游走</h3><p>随机游走是由一系列轨迹组成的统计模型，每个轨迹的每一步都是随机的。随机游走可以在各种类型的空间中进行通常，随机行走算法如下。<br>1）生成一个关系图G，如果$v_i$是$v_j$的一个原因则$e_{ij}\in E$<br>2）计算矩阵Q：</p>
+<ul>
+<li>Forward Step，从结果节点到原因节点。我们认为，与异常节点连接的点更有可能是根因。$Q_{ij} = R(v_{abnormal},v_{j})$，二者的相关系数，where$e_{ji}=1$，即j是i的原因。</li>
+<li>Backward Step，从原因节点到结果节点。为了防止算法陷在与异常节点，对于$e_{ji}\in E,e_{ij}\notin E, Q_{ji} = ρR(v_{abnormal},v_i),ρ\in [0,1]$，</li>
+<li>Self Step, 如果该算法走到一个节点，该节点的相邻节点与异常节点的相关性都较低，则该节点可能表示根本原因。$Q_{ii} = max[0, R(v_{abnormal}, v_i) − max_{k:e_{ki}\in E} R(v_{abnormal}, v_k)]$</li>
+</ul>
+<p>3）Normalize ervey row of Q， 得到转移概率矩阵<br>4）在G上随机游走，从$v_i$走到$v_j$的概率是$\bar Q_{ij}$<br>在以上四个步骤之后，访问频率最高的节点最有可能表示根本原因。</p>
+<h2 id="Challenges-and-Design-Overview"><a href="#Challenges-and-Design-Overview" class="headerlink" title="Challenges and Design Overview"></a>Challenges and Design Overview</h2><h3 id="A-Challenges"><a href="#A-Challenges" class="headerlink" title="A. Challenges"></a>A. Challenges</h3><p>受计算机系统故障根源定位模型的流行设计的启发，MicroCause有两个主要部分，因果图构造（旨在学习组件之间关系）和随机游走（试图推断根本原因）。存在三个挑战：</p>
+<ol>
+<li>基于iid的因果图无法捕获传播延迟。通常情况下，因果图学习算法假设数据是独立的、同分布的（用iid表示），因此它不能捕捉不同metric和KPI的传播延迟。例如，路径条件（PC）算法是一种流行的因果图学习算法，已经被用于学习api的因果关系，它将metric/KPI的每个时间点视为一个iid数据样本。然而，忽略序列模式的因果图可能无法准确地学习因果关系。例如，如图5所示，PC算法将17:18（虚线框中）的数据点视为iid数据样本，并假设该数据样本与17:16和17:17的数据样本独立。因此，PC算法只能得知中间件用户QPS异常会导致中间件用户RT异常。然而，当一个metric变得异常时，它也可能导致KPI或另一个metric在一段时间后由于传播延迟而异常。例如，当Web QPS在17:16变得异常时，它导致Web RT在17:17异常，而中间件消费者QPS在17:18异常。由于PC算法忽略了度量和kpi之间的传播延迟，因此不能准确地推断Web RT异常的根本原因是Web QPS异常。</li>
+<li>基于相关性的随机游走可能无法准确定位根本原因。随机游走被广泛用于根本原因定位。它基于这样一个假设：与异常KPI更相关的异常metric更有可能是根本原因。然而，在我们的场景中，监控指标（KPI和度量）是异构的。通常情况下，同一类别的监测指标比不同类别的监测指标相关性更大。例如，图6中的异常KPI（Web RT）与中间件消费者RT的关系更密切，但它与根本原因度量（即Web QPS）无关。这是因为Web RT和中间件消费者RT在异常时都会经历较大的峰值。相反，当异常发生时，Web QPS更有可能遭受电平偏移。<h3 id="B-Design-Overview"><a href="#B-Design-Overview" class="headerlink" title="B. Design Overview"></a>B. Design Overview</h3>MicroCause，它是一种基于因果关系推理的微服务故障根源定位框架。在图7中，我们演示了微型计算机如何通过故障单X{微服务A，Web RT，17:18}工作。当在KPI中检测到在线异常时（如Web RT），MicroCause将被激活。基于经验故障传播时间，将故障前4小时到该时刻的故障微服务监测指标作为MicroCause的输入。对于故障单X，使用微服务A的监控指标，从13:18到17:18。<br>根据我们提出的时间序列因果图学习的PCTS算法，利用输入数据集生成故障因果图。同时，用异常检测模块检查输入数据集中的metric是否存在异常。故障因果图学习模块和异常检测模块可以并行处理。然后，基于故障因果图和度量的异常信息，利用面向时间原因的随机游动（TCORW）给出故障前N个潜在根本原因。</li>
+</ol>
+<h2 id="Methodology"><a href="#Methodology" class="headerlink" title="Methodology"></a>Methodology</h2><h3 id="A-Failure-Causal-Graph-Learning"><a href="#A-Failure-Causal-Graph-Learning" class="headerlink" title="A. Failure Causal Graph Learning"></a>A. Failure Causal Graph Learning</h3><p>在以前的工作中，建立一个依赖图（例如API接口的调用图）非常重要。<br>建立因果图<br>时间序列中每一个时间点被视为因果图的一个节点，对于每一个节点就会有它的“parent”集合。我们对邻接的节点做条件独立性分析。如果独立的空假设不能被拒绝的话，就从parent里移出。重复就可以得到因果图。但这还不是下一阶段需要的。</p>
+<h3 id="B-Anomaly-Detection"><a href="#B-Anomaly-Detection" class="headerlink" title="B. Anomaly Detection"></a>B. Anomaly Detection</h3><p>在MicroCause中，我们假设根本原因metric在故障时间之前的某个时间应该变得异常。我们采用SPOT来检测度量的异常。因为SPOT通过极值理论检测时间序列的突变。它符合微服务异常度量的特点。对于时间序列中的每个时间点，SPOT将根据过去数据的极值分布生成一个阈值。如果时间点的值高于高阈值或低于低阈值，则将其视为异常。基于度量的物理意义，我们在表一中列出了度量的检测类型。<br>给定时间序列$\mathbf M^i=M_o^i,M_1^i,…,M_T^i$，$\mathbf M^i$的异常点集是$O$，$M_t^i$的阈值为$\phi_{M_t^i}$<br>计算了异常metric的degree: $\eta_{max}^i=\max_{k\in O}\frac{|M_k^i-\phi_{M_k^i}|}{\phi_{M_k^i}}$</p>
+<p>对于同时检测到高阈值和低阈值的度量，将使用这两个条件的η的最大值。异常检测模块完成后，输出各指标的异常时间和异常degree。例如，故障单X中Web的QPS在17:17出现异常，异常程度为10.62。JVM的YGC时间在17:17出现异常，异常程度为18.35。系统的内存利用率没有异常。</p>
+<h3 id="C-Temporal-Cause-Oriented-Random-Walk"><a href="#C-Temporal-Cause-Oriented-Random-Walk" class="headerlink" title="C. Temporal Cause Oriented Random Walk"></a>C. Temporal Cause Oriented Random Walk</h3><p>已经得到了异常metric和异常因果图$G_{FCG}$<br>$v_i$表示一个监测指标，包括KPI和metric<br>如果节点$v_i$是节点$v_j$的原因，则$e_{ij}=1\in E$<br>随机游走：<br>1）面向原因的随机游走<br>在这一步中，我们提出了面向原因的随机游走，通过指标和关键绩效指标之间的因果关系来寻找可能的根本原因。在传统的随机游走中，使用相关性来量化metric与异常KPI之间的关系。但是“相关性不等于因果关系”，因为相关性不能消除第三个变量的影响（因果关系研究中称为混杂因素）。作者使用的是偏相关系数，可以去除干扰项的影响。</p>
+<ul>
+<li>Forward Step，从结果节点到原因节点。<br>$Q_{ij}=R_{pc}(v_{ak},v_j|Pa(v_{ak})\backslash v_j, Pa(v_j))$<br>$R_{pc}$代表偏相关，$Pa(v_{ak})$代表$v_{ak}$节点的父节点集，把$Pa(v_{ak}\backslash v_j)$和$Pa(v_j)$作为偏相关的干扰因子。</li>
+<li>Backward Step，从原因节点到结果节点。对于$e_{ji}\in E,e_{ij}\notin E, Q_{ji} = ρR_{pc}(v_{ak},v_i|Pa(v_{ak})\backslash v_i, Pa(v_i)),ρ\in [0,1]$，</li>
+<li>Self Step, 如果当前节点所有邻居都与$v_{ak}$的因果关系都很低，鼓励walker停在当前的节点，如果该算法走到一个节点，该节点的相邻节点与异常节点的相关性都较低，则该节点可能表示根本原因。$Q_{ii} = max[0, R_{pc}(v_{ak}, v_i|Pa(v_{ak})\backslash v_i, Pa(v_i)) − P_{pc}^{max}]$, $P_{pc}^{max}=\max_{k:e_{ki}\in E} R_{pc}(v_{ak}, v_k|Pa(v_{ak})\backslash v_k, Pa(v_k))$</li>
+</ul>
+<p>得到概率转移矩阵$\bar Q$，从$v_{ak}$开始随机游走，$N_{rw}$个step后每个节点被访问到$c_i$次</p>
+<p>2）可能的根因打分<br>将异常KPI的因果关系，以及metric的异常degree纳入考虑。<br>define：metric i可能的根因打分$\gamma_i=\lambda\bar c_i+(1-\lambda)\bar\eta_{max}^i$，$\bar c_i$是归一化的visit次数$c_i$</p>
+<p>3）根因排序<br>对于时间序列监测数据来说，异常时间是一个不可忽略的信息，可以用来推断根本原因。然而，由于数据的聚集和异常的瞬时传播，一些metric看起来可能同时变得异常。不同的metric反映了微服务中不同部分的性能。它们在传播路径中有不同的优先级。例如，当微服务A中Web（上游）的QPS上升时，由于微服务任务的增加，中间件1（下游）的消费者QPS将增长。微服务A系统的CPU同样增加。但是middleware1的消费者QPS不会影响Web的QPS。<br>在这里，我们将度量分为三个级别，如表2所示。通常，高水平指标（如1级指标）会影响低水平指标（如2级指标）。因此，高级别的度量具有更高的优先级，可以将其视为根本原因。<br>将metric的潜在根因得分、优先级、异常时间结合起来，对所有潜在根因进行排序。</p>
+<h2 id="Experiment"><a href="#Experiment" class="headerlink" title="Experiment"></a>Experiment</h2><h3 id="A-Experimental-setup"><a href="#A-Experimental-setup" class="headerlink" title="A. Experimental setup"></a>A. Experimental setup</h3><p>1）Dataset<br>从2019年9月到2020年1月，我们通过监测400多个微服务的状态，收集了86个在线故障单。每种情况都由专业操作员进行检查，以找出根本原因。每个微服务的数据集包含64个metric和4个KPI。四个KPI是Web RT、Middleware1 Provider RT、Middleware2 Receive RT和Middleware3 Receive RT。所有metric根据其与微服务的关系分为三类。<br>2）Evaluation Metric<br>AC@k: 算法给出的前k个结果包含所有给定故障情况的实际根本原因的概率。在k较小的情况下，由于搜索空间小，AC@k越高，越方便在实际中进一步调查。<br>Avg@k：AC@k的平均<br>3）Baseline Algorithm</p>
+<h3 id="B-Evaluation-of-the-overall-performance"><a href="#B-Evaluation-of-the-overall-performance" class="headerlink" title="B. Evaluation of the overall performance"></a>B. Evaluation of the overall performance</h3><h3 id="C-Evaluation-of-Failure-Causal-Graph-Learning"><a href="#C-Evaluation-of-Failure-Causal-Graph-Learning" class="headerlink" title="C. Evaluation of Failure Causal Graph Learning"></a>C. Evaluation of Failure Causal Graph Learning</h3><p>在这一部分，我们将分析故障因果图学习部分的性能。PCTS将与之前的根本原因定位工作中使用的PC算法进行比较。在这里，我们将PC机中独立测试的显著性水平取为0.05，这是以前工作中常见的设置。PCTS在AC@1和AC@3这两个任务中的表现分别比PC至少高出1.8%和3.7%。在最常用的AC@5在实际应用中，PCTS比PC提高了5.1%。<br>图8是通过PC算法得到的故障票X的故障因果图。与通过PCTS绘制的图形（图2）不同，图形分为两部分。因为没有来自Web RT的路径，所以Walker无法进入真正的根本原因web QPS。这种现象并不少见。在[12]中，作者声明了基于时间序列数据的PC算法生成的孤立子图。这是因为当我们使用PC算法时，我们把时间序列当作iid数据。实际上，我们将It=（It1，…，ItN）和Itτ=（It1τ，…，ItNτ）视为独立样本，这意味着Itiτ和Itj之间没有边。但人们承认时间序列之间的因果关系往往伴随着时间滞后。因此，PC算法无法识别实际应用中的时滞因果关系，如Web的QPS对系统内存利用率的影响，由于程序初始化的时间，这种影响不是瞬时的。</p>
+<h3 id="D-Evaluation-of-TCORW"><a href="#D-Evaluation-of-TCORW" class="headerlink" title="D. Evaluation of TCORW"></a>D. Evaluation of TCORW</h3><p>在这一部分中，我们分析了根本原因分析部分TCORW的性能。这里，RW-1和RW-2将被用作基线算法。结果如表V所示。所有结果均基于PCT，用于根本原因分析。在所有方法中，MicroCause在故障根源定位任务中的性能最好，从所有评价指标来看，MicroCause w/RW-1的性能优于w/RW-2微腔。总的来说，如果我们用PC来代替PCT，性能会显著降低（例如，性能下降30%以上）AC@5)验证了所提出的TCORW算法的有效性。</p>
+<h3 id="E-Evaluation-of-The-Parameters-in-MicroCause"><a href="#E-Evaluation-of-The-Parameters-in-MicroCause" class="headerlink" title="E. Evaluation of The Parameters in MicroCause"></a>E. Evaluation of The Parameters in MicroCause</h3>
+    </div>
+
+    
+    
+    
+
+      <footer class="post-footer">
+          <div class="post-tags">
+              <a href="/blog/tags/GNNPaper/" rel="tag"># GNNPaper</a>
+          </div>
+
+        
+
+
+        
+    <div class="post-nav">
+      <div class="post-nav-item">
+    <a href="/blog/2020/12/14/04%20ConcurrentHashMap-in-JDK1-8/" rel="prev" title="ConcurrentHashMap in JDK1.8">
+      <i class="fa fa-chevron-left"></i> ConcurrentHashMap in JDK1.8
+    </a></div>
+      <div class="post-nav-item"></div>
+    </div>
+      </footer>
+    
+  </article>
+  
+  
+  
+
+
+
+          </div>
+          
+
+<script>
+  window.addEventListener('tabs:register', () => {
+    let { activeClass } = CONFIG.comments;
+    if (CONFIG.comments.storage) {
+      activeClass = localStorage.getItem('comments_active') || activeClass;
+    }
+    if (activeClass) {
+      let activeTab = document.querySelector(`a[href="#comment-${activeClass}"]`);
+      if (activeTab) {
+        activeTab.click();
+      }
+    }
+  });
+  if (CONFIG.comments.storage) {
+    window.addEventListener('tabs:click', event => {
+      if (!event.target.matches('.tabs-comment .tab-content .tab-pane')) return;
+      let commentClass = event.target.classList[1];
+      localStorage.setItem('comments_active', commentClass);
+    });
+  }
+</script>
+
+        </div>
+          
+  
+  <div class="toggle sidebar-toggle">
+    <span class="toggle-line toggle-line-first"></span>
+    <span class="toggle-line toggle-line-middle"></span>
+    <span class="toggle-line toggle-line-last"></span>
+  </div>
+
+  <aside class="sidebar">
+    <div class="sidebar-inner">
+
+      <ul class="sidebar-nav motion-element">
+        <li class="sidebar-nav-toc">
+          Table of Contents
+        </li>
+        <li class="sidebar-nav-overview">
+          Overview
+        </li>
+      </ul>
+
+      <!--noindex-->
+      <div class="post-toc-wrap sidebar-panel">
+          <div class="post-toc motion-element"><ol class="nav"><li class="nav-item nav-level-2"><a class="nav-link" href="#Abstract"><span class="nav-number">1.</span> <span class="nav-text">Abstract</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Introduction"><span class="nav-number">2.</span> <span class="nav-text">Introduction</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Preliminaries"><span class="nav-number">3.</span> <span class="nav-text">Preliminaries</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#A-Microservice-architecture"><span class="nav-number">3.1.</span> <span class="nav-text">A. Microservice architecture</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#B-Problem-Statement"><span class="nav-number">3.2.</span> <span class="nav-text">B. Problem Statement</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#C%E3%80%81-PC%E7%AE%97%E6%B3%95"><span class="nav-number">3.3.</span> <span class="nav-text">C、 PC算法</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#D%E3%80%81-%E9%9A%8F%E6%9C%BA%E6%B8%B8%E8%B5%B0"><span class="nav-number">3.4.</span> <span class="nav-text">D、 随机游走</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Challenges-and-Design-Overview"><span class="nav-number">4.</span> <span class="nav-text">Challenges and Design Overview</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#A-Challenges"><span class="nav-number">4.1.</span> <span class="nav-text">A. Challenges</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#B-Design-Overview"><span class="nav-number">4.2.</span> <span class="nav-text">B. Design Overview</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Methodology"><span class="nav-number">5.</span> <span class="nav-text">Methodology</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#A-Failure-Causal-Graph-Learning"><span class="nav-number">5.1.</span> <span class="nav-text">A. Failure Causal Graph Learning</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#B-Anomaly-Detection"><span class="nav-number">5.2.</span> <span class="nav-text">B. Anomaly Detection</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#C-Temporal-Cause-Oriented-Random-Walk"><span class="nav-number">5.3.</span> <span class="nav-text">C. Temporal Cause Oriented Random Walk</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Experiment"><span class="nav-number">6.</span> <span class="nav-text">Experiment</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#A-Experimental-setup"><span class="nav-number">6.1.</span> <span class="nav-text">A. Experimental setup</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#B-Evaluation-of-the-overall-performance"><span class="nav-number">6.2.</span> <span class="nav-text">B. Evaluation of the overall performance</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#C-Evaluation-of-Failure-Causal-Graph-Learning"><span class="nav-number">6.3.</span> <span class="nav-text">C. Evaluation of Failure Causal Graph Learning</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#D-Evaluation-of-TCORW"><span class="nav-number">6.4.</span> <span class="nav-text">D. Evaluation of TCORW</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#E-Evaluation-of-The-Parameters-in-MicroCause"><span class="nav-number">6.5.</span> <span class="nav-text">E. Evaluation of The Parameters in MicroCause</span></a></li></ol></li></ol></div>
+      </div>
+      <!--/noindex-->
+
+      <div class="site-overview-wrap sidebar-panel">
+        <div class="site-author motion-element" itemprop="author" itemscope itemtype="http://schema.org/Person">
+  <p class="site-author-name" itemprop="name">Sihan Wang</p>
+  <div class="site-description" itemprop="description"></div>
+</div>
+<div class="site-state-wrap motion-element">
+  <nav class="site-state">
+      <div class="site-state-item site-state-posts">
+          <a href="/blog/archives/">
+        
+          <span class="site-state-item-count">6</span>
+          <span class="site-state-item-name">posts</span>
+        </a>
+      </div>
+      <div class="site-state-item site-state-tags">
+        <span class="site-state-item-count">2</span>
+        <span class="site-state-item-name">tags</span>
+      </div>
+  </nav>
+</div>
+
+
+
+      </div>
+
+    </div>
+  </aside>
+  <div id="sidebar-dimmer"></div>
+
+
+      </div>
+    </main>
+
+    <footer class="footer">
+      <div class="footer-inner">
+        
+
+        
+
+<div class="copyright">
+  
+  &copy; 
+  <span itemprop="copyrightYear">2020</span>
+  <span class="with-love">
+    <i class="fa fa-heart"></i>
+  </span>
+  <span class="author" itemprop="copyrightHolder">Sihan Wang</span>
+</div>
+  <div class="powered-by">Powered by <a href="https://hexo.io/" class="theme-link" rel="noopener" target="_blank">Hexo</a> & <a href="https://muse.theme-next.org/" class="theme-link" rel="noopener" target="_blank">NexT.Muse</a>
+  </div>
+
+        
+
+
+
+
+
+
+
+
+      </div>
+    </footer>
+  </div>
+
+  
+  <script src="/blog/lib/anime.min.js"></script>
+  <script src="/blog/lib/velocity/velocity.min.js"></script>
+  <script src="/blog/lib/velocity/velocity.ui.min.js"></script>
+
+<script src="/blog/js/utils.js"></script>
+
+<script src="/blog/js/motion.js"></script>
+
+
+<script src="/blog/js/schemes/muse.js"></script>
+
+
+<script src="/blog/js/next-boot.js"></script>
+
+
+
+
+  
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+
+  
+
+</body>
+</html>
